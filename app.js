@@ -8,6 +8,7 @@ const bodyParser = require('body-parser');
 const { Server } = require('socket.io');
 const http = require('http');
 const { OpenAI } = require("openai");
+const resumeRoutes = require('./router/resume');
 const openai = new OpenAI({
     apiKey: "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",
     baseURL: "https://openrouter.ai/api/v1",
@@ -32,7 +33,11 @@ app.use(cors());
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use(cors({
+    origin: 'http://10.200.17.94:8080', // or wherever your frontend runs
+    methods: ['GET', 'POST']
+}));
+app.use('/resume', resumeRoutes);
 // MongoDB Models
 const userSchema = new mongoose.Schema({
     name: String,
@@ -76,20 +81,47 @@ app.post('/user/signup', async(req, res) => {
 });
 
 // User Login
+// app.post('/user/login', async(req, res) => {
+//     try {
+//         const { email, password } = req.body;
+//         const foundUser = await User.findOne({ email });
+//         if (!foundUser) return res.status(404).json({ error: 'User not found' });
+
+//         const isMatch = await bcrypt.compare(password, foundUser.password);
+//         if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
+
+//         res.json({ message: 'User logged in', user: { name: foundUser.name, email: foundUser.email } });
+//     } catch (err) {
+//         res.status(500).json({ error: err.message });
+//     }
+// });
 app.post('/user/login', async(req, res) => {
     try {
         const { email, password } = req.body;
         const foundUser = await User.findOne({ email });
-        if (!foundUser) return res.status(404).json({ error: 'User not found' });
+
+        if (!foundUser)
+            return res.status(404).json({ message: 'User not found' });
 
         const isMatch = await bcrypt.compare(password, foundUser.password);
-        if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
 
-        res.json({ message: 'User logged in', user: { name: foundUser.name, email: foundUser.email } });
+        if (!isMatch)
+            return res.status(400).json({ message: 'Invalid password' });
+
+        // No JWT, just return user info
+        res.json({
+            message: 'User logged in successfully',
+            user: {
+                name: foundUser.name,
+                email: foundUser.email,
+                _id: foundUser._id // Optional: use only if needed
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
+
 
 // Faculty Signup
 app.post('/faculty/signup', async(req, res) => {
