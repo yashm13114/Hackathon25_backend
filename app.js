@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
+const socketIo = require('socket.io');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { Server } = require('socket.io');
@@ -22,10 +23,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-    },
+        origin: "http://localhost:8080", // your frontend address
+        methods: ["GET", "POST"]
+    }
 });
+
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -62,7 +64,20 @@ mongoose
 app.get('/', (req, res) => {
     res.send('🔥 Backend is up and running!');
 });
+// Handle real-time chat messages
+io.on('connection', (socket) => {
+    console.log('a user connected');
 
+    // Listen for chat messages and broadcast to other users
+    socket.on('chat message', (msg) => {
+        io.emit('chat message', msg); // Emit the message to all connected clients
+    });
+
+    // Handle disconnections
+    socket.on('disconnect', () => {
+        console.log('user disconnected');
+    });
+});
 // User Signup
 app.post('/user/signup', async(req, res) => {
     try {
