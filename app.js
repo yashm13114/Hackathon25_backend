@@ -9,7 +9,7 @@ const bodyParser = require('body-parser');
 const { Server } = require('socket.io');
 const http = require('http');
 const { OpenAI } = require("openai");
-const resumeRoutes = require('./router/resume');
+const resumeRoutes = require('./router/resume.jsx');
 const openai = new OpenAI({
     apiKey: "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",
     baseURL: "https://openrouter.ai/api/v1",
@@ -24,21 +24,26 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: "http://localhost:8080", // your frontend address
-        methods: ["GET", "POST"]
+        methods: ["GET", "POST"],
     }
 });
 
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+    origin: ['http://10.200.17.94:8080', 'http://localhost:8080', 'http://localhost:8081'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true // Optional: if you're using cookies or auth headers
+};
+
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({
-    origin: 'http://10.200.17.94:8080', // or wherever your frontend runs
-    methods: ['GET', 'POST']
-}));
+
 app.use('/resume', resumeRoutes);
 // MongoDB Models
 const userSchema = new mongoose.Schema({
@@ -66,16 +71,40 @@ app.get('/', (req, res) => {
 });
 // Handle real-time chat messages
 io.on('connection', (socket) => {
-    console.log('a user connected');
+    console.log('a user connected:', socket.id);
 
-    // Listen for chat messages and broadcast to other users
-    socket.on('chat message', (msg) => {
-        io.emit('chat message', msg); // Emit the message to all connected clients
+    // Notify existing users about new user
+    socket.broadcast.emit('user-connected', socket.id);
+
+    // Send existing users to new user
+    socket.on('get-users', (callback) => {
+        const users = Array.from(io.sockets.sockets.keys()).filter(id => id !== socket.id);
+        socket.emit('existing-users', users);
+        if (callback) callback(users);
+    });
+
+    // WebRTC signaling
+    socket.on('offer', (toId, description) => {
+        socket.to(toId).emit('offer', socket.id, description);
+    });
+
+    socket.on('answer', (toId, description) => {
+        socket.to(toId).emit('answer', socket.id, description);
+    });
+
+    socket.on('candidate', (toId, candidate) => {
+        socket.to(toId).emit('candidate', socket.id, candidate);
     });
 
     // Handle disconnections
     socket.on('disconnect', () => {
-        console.log('user disconnected');
+        console.log('user disconnected:', socket.id);
+        socket.broadcast.emit('user-disconnected', socket.id);
+    });
+
+    // Existing chat message handler
+    socket.on('chat message', (msg) => {
+        io.emit('chat message', msg);
     });
 });
 // User Signup
